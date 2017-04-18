@@ -1,4 +1,4 @@
-package util.word;
+package util.office.word;
 
 import java.io.File;
 import java.io.FileInputStream;
