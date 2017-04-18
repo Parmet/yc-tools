@@ -24,7 +24,7 @@ import org.apache.poi.xwpf.usermodel.XWPFTableCell;
 import org.apache.poi.xwpf.usermodel.XWPFTableRow;
 import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTRow;
 
-public class TestClass {
+public class WordOperateUtil {
     private int rowNum = 0;
     
     /**
@@ -481,7 +481,7 @@ public class TestClass {
             long startTime = System.currentTimeMillis();
             System.out.println("start:" + startTime);
             
-            TestClass testClass = new TestClass();
+            WordOperateUtil testClass = new WordOperateUtil();
             Map<String, Object> map = testClass.getData();
             testClass.ConvertWord("d:/project/test/src/test/person_pay_history_three_insurance.docx", map);
             long endTime = System.currentTimeMillis();
