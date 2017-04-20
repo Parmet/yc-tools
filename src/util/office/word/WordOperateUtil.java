@@ -7,7 +7,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.reflect.Field;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -24,8 +23,50 @@ import org.apache.poi.xwpf.usermodel.XWPFTableCell;
 import org.apache.poi.xwpf.usermodel.XWPFTableRow;
 import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTRow;
 
+/**
+ * word操作类
+ * 
+ * @author xiaoyc 2017-04-14
+ */
 public class WordOperateUtil {
     private int rowNum = 0;
+    
+    /**
+     * 填充word数据
+     * 
+     * @param fileName
+     * @param map
+     * @throws Exception
+     */
+    public File ConvertWord(String fileName, Map<String, Object> map) throws Exception {
+        
+        String pathFileName = "D:\\201704\\watermark\\testFile\\tempfile_" + System.currentTimeMillis() + ".doc";
+        File file = new File(pathFileName); // 创建临时文件
+        OutputStream os = new FileOutputStream(file);
+        InputStream fileInputStream = new FileInputStream(fileName);
+    
+        try {
+            // 读取word源文件
+            XWPFDocument document = new XWPFDocument(fileInputStream);
+            // 替换段落里面的变量
+            this.replaceInPara(document, map);
+            // 替换表格里面的变量
+            this.replaceInTable(document, map);
+    
+            document.write(os);
+            this.close(os);
+            this.close(fileInputStream);
+            
+        } catch (Exception e) {
+            throw new Exception(e);
+        } finally {
+            this.close(os);
+            this.close(fileInputStream);
+        }
+        
+        return file;
+    }
+
     
     /**
      * map转换适配器
@@ -34,15 +75,23 @@ public class WordOperateUtil {
      * @return
      */
     @SuppressWarnings("unchecked")
-    public Map<String, Object> ConvertObjToMapAdpater(Object obj) {
+    private Map<String, Object> ConvertObjToMapAdpater(Object obj) {
         
         // 如果是集合或者数组，获取当前行的数据，最后尝试转换成map
         if (obj instanceof Collection<?>) {
             Collection<?> col = (Collection<?>) obj;
+            if (col.size() <= 0) {
+                return new HashMap<String, Object>();
+            }
+            
             return this.ConvertObjToMapAdpater(col.toArray()[this.rowNum]);
         } else if (obj instanceof Map) {
             return (Map<String, Object>) obj;
         } else if (obj.getClass().isArray()) {
+            if (((Object[]) obj).length <= 0) {
+                return new HashMap<String, Object>();
+            }
+            
             return this.ConvertObjToMapAdpater(((Object[]) obj)[this.rowNum]);
         } else {
             return this.ConvertObjToMap(obj);
@@ -55,7 +104,7 @@ public class WordOperateUtil {
      * @param obj
      * @return
      */
-    public Map<String, Object> ConvertObjToMap(Object obj) {
+    private Map<String, Object> ConvertObjToMap(Object obj) {
         Map<String, Object> reMap = new HashMap<String, Object>();
         if (obj == null)
             return null;
@@ -63,7 +112,8 @@ public class WordOperateUtil {
         try {
             for (int i = 0; i < fields.length; i++) {
                 try {
-                    Field f = obj.getClass().getDeclaredField(fields[i].getName());
+                    Field f = obj.getClass().getDeclaredField(
+                            fields[i].getName());
                     f.setAccessible(true);
                     Object o = f.get(obj);
                     reMap.put(fields[i].getName(), o);
@@ -82,35 +132,6 @@ public class WordOperateUtil {
         return reMap;
     }
     
-    public void ConvertWord(String fileName, Map<String, Object> map) throws Exception {
-        
-        String pathFileName = "D:\\201704\\watermark\\testFile\\tempfile_" + System.currentTimeMillis() + ".doc";
-        File file = new File(pathFileName); // 创建临时文件
-        OutputStream os = new FileOutputStream(file);
-        InputStream fileInputStream = new FileInputStream(fileName);
-
-        try {
-            // 读取word源文件
-            XWPFDocument document = new XWPFDocument(fileInputStream);
-            // 替换段落里面的变量
-            this.replaceInPara(document, map);
-            // 替换表格里面的变量
-            this.replaceInTable(document, map);
-            
-            document.write(os);
-            this.close(os);
-            this.close(fileInputStream);
-
-            System.out.println("save as : " + pathFileName);
-        } catch (Exception e) {
-            throw new Exception(e);
-        } finally {
-            this.close(os);
-            this.close(fileInputStream);
-        }
-
-    }
-
     /**
      * 替换段落里面的变量
      * 
@@ -141,7 +162,7 @@ public class WordOperateUtil {
         List<XWPFRun> runs;
 
         String runText = "";
-        if (this.matcher(para.getParagraphText()).find()) {
+        if (this.matcherRegion(para.getParagraphText()).find()) {
             runs = para.getRuns();
             if (runs.size() > 0) {
                 int j = runs.size();
@@ -165,26 +186,49 @@ public class WordOperateUtil {
     }
 
     /**
-     * 替换字符串中所有的匹配项
+     * 替换字符串的首个匹配项
      * 
      * @param text
      * @param params
      * @return
      */
     private String replaceText(String text, Map<String, Object> params) {
-        Matcher matcher = this.matcher(text);
+        Matcher matcher = this.matcherRegion(text);
         String key = "";
         
         if (matcher.find()) {
             key = matcher.group(1);
-            if (params.containsKey(key)) {
-                text = matcher.replaceFirst(String.valueOf(params.get(key)));
-            } else {
-                text = matcher.replaceFirst("");
-            }
+            text = this.replaceVal(key, text, params);
             
+            // 该字符串存在多个匹配项的情况下，调用replaceText替换字符串的首个匹配项
             text = this.replaceText(text, params);
         }
+        
+        return text;
+    }
+    
+    /**
+     * 替代匹配项的值
+     * 
+     * @param text
+     * @param params 
+     * @return
+     */
+    private String replaceVal(String key, String text, Map<String, Object> params) {
+        String defaultVal = "";
+        String targetStr = "${" + key + "}";
+        
+        Matcher matcher = this.matcherDefaultVale(text);
+        if (matcher.find()) {
+            defaultVal = matcher.group(1);
+            targetStr += "?\"" + defaultVal + "\"";
+        }
+        
+        if (params.containsKey(key)) {
+            defaultVal = String.valueOf(params.get(key));
+        }
+        
+        text = text.replace(targetStr, defaultVal);
         
         return text;
     }
@@ -222,11 +266,10 @@ public class WordOperateUtil {
                     
                     if (j == (rowCount - 1)) {
                         table.removeRow(i);
+                        this.rowNum = 0;
                     }
                 }
             }
-            
-            this.rowNum = 0;
         }
         
     }
@@ -278,7 +321,7 @@ public class WordOperateUtil {
     private Map<String, Object> getParagraphData(XWPFParagraph para, Map<String, Object> params) {
         Map<String, Object> map = new HashMap<String, Object>();
         Map<String, Object> data = params;
-        Matcher matcher = this.matcher(para.getParagraphText());
+        Matcher matcher = this.matcherRegion(para.getParagraphText());
         while (matcher.find()) {
             
             String key = matcher.group(1);
@@ -286,7 +329,6 @@ public class WordOperateUtil {
             for (int i = 0; i < keys.length; i++) {
                 Object val = data.get(keys[i]);
                 if (val == null) {
-                    map.put(key, "");
                     break;
                 }
                 
@@ -342,9 +384,18 @@ public class WordOperateUtil {
             paras = cell.getParagraphs();
             for (XWPFParagraph para : paras) {
                 
-                matcher = this.matcher(para.getParagraphText());
+                matcher = this.matcherRegion(para.getParagraphText());
                 if (matcher.find()) {
                     key = (matcher.group(1)).split("\\.");
+                    if (key[0].equals("")) {
+                        return rowCount;
+                    }
+                    
+                    Object val = params.get(key[0]);
+                    if (val == null) {
+                        return rowCount;
+                    }
+                    
                     if (params.get(key[0]) instanceof Collection<?>) {
                         Collection<?> col = (Collection<?>) params.get(key[0]);
                         rowCount = col.size();
@@ -371,8 +422,20 @@ public class WordOperateUtil {
      * @param str
      * @return
      */
-    public Matcher matcher(String str) {
+    public Matcher matcherRegion(String str) {
         Pattern pattern = Pattern.compile("\\$\\{(.+?)\\}", Pattern.CASE_INSENSITIVE);
+        Matcher matcher = pattern.matcher(str);
+        return matcher;
+    }
+    
+    /**
+     * 正则匹配字符串
+     * 
+     * @param str
+     * @return
+     */
+    public Matcher matcherDefaultVale(String str) {
+        Pattern pattern = Pattern.compile("\\?\"(.*?)\"", Pattern.CASE_INSENSITIVE);
         Matcher matcher = pattern.matcher(str);
         return matcher;
     }
@@ -406,102 +469,4 @@ public class WordOperateUtil {
             }
         }
     }
-    
-    private Map<String, Object> getData() {
-        Map<String, Object> map = new HashMap<String, Object>();
-        
-        Map<String, Object> map1 = new HashMap<String, Object>();
-        map1.put("aac147", "440104195404242811");
-        map1.put("aac003", "测试人员");
-        map1.put("aac004", "男");
-        
-        map.put("info", map1);
-        map.put("currDate", "2017-04-10");
-        map.put("authCode", "152452");
-        
-        Map<String, Object> mouth = new HashMap<String, Object>();
-        mouth.put("synx", "1");
-        mouth.put("syeys", "11");
-        mouth.put("gsnx", "11");
-        mouth.put("gsys", "1");
-        mouth.put("syunx", "2");
-        mouth.put("syuys", "3");
-        
-        map.put("mouthTotal", mouth);
-
-        List<Map<String, Object>> lists = new ArrayList<Map<String, Object>>();
-        Map<String, Object> maps1 = new HashMap<String, Object>();
-        maps1.put("aae003", "2015.5-2015.6");
-        maps1.put("aae202", "2");
-        maps1.put("aae180_unemply", "100");
-        maps1.put("aae140_unemply_dw", "55");
-        maps1.put("aae140_unemply_gr", "45");
-        maps1.put("aae180_gs", "33");
-        maps1.put("aae140_gs", "655");
-        maps1.put("aae180_sy", "458");
-        maps1.put("aae140_sy", "885");
-        maps1.put("aab069", "广州威慑么么科技公司");
-        
-        Map<String, Object> maps2 = new HashMap<String, Object>();
-        maps2.put("aae003", "2015.1-2015.4");
-        maps2.put("aae202", "4");
-        maps2.put("aae180_unemply", "100");
-        maps2.put("aae140_unemply_dw", "55");
-        maps2.put("aae140_unemply_gr", "45");
-        maps2.put("aae180_gs", "33");
-        maps2.put("aae140_gs", "655");
-        maps2.put("aae180_sy", "458");
-        maps2.put("aae140_sy", "885");
-        maps2.put("aab069", "广州威慑么么科技公司");
-        
-        Map<String, Object> maps3 = new HashMap<String, Object>();
-        maps3.put("aae003", "2014.11-2014.12");
-        maps3.put("aae202", "2");
-        maps3.put("aae180_unemply", "100");
-        maps3.put("aae140_unemply_dw", "55");
-        maps3.put("aae140_unemply_gr", "45");
-        maps3.put("aae180_gs", "33");
-        maps3.put("aae140_gs", "655");
-        maps3.put("aae180_sy", "458");
-        maps3.put("aae140_sy", "885");
-        maps3.put("aab069", "广州威慑么么科技公司");
-
-        lists.add(maps1);
-        lists.add(maps2);
-        lists.add(maps3);
-
-        map.put("content", lists);
-        
-        return map;
-    }
-
-    public static void main(String[] args) {
-
-        try {
-            long startTime = System.currentTimeMillis();
-            System.out.println("start:" + startTime);
-            
-            WordOperateUtil testClass = new WordOperateUtil();
-            Map<String, Object> map = testClass.getData();
-            testClass.ConvertWord("d:/project/test/src/test/person_pay_history_three_insurance.docx", map);
-            long endTime = System.currentTimeMillis();
-            System.out.println("end:" + endTime);
-            System.out.println("useTime:" + (endTime - startTime));
-            System.out.println("success!1:1100--2:");
-            
-            int count = 0;
-            String str = "123${123}ee${111}";
-            Matcher matcher = testClass.matcher(str);
-            while(matcher.find()) {
-                count++;
-                System.out.println(matcher.groupCount());  
-                System.out.println(matcher.group(1));  
-            }
-            
-            System.out.println("共有 " + count + "个 ");   
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
 }
