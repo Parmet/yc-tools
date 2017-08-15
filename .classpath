@@ -15,8 +15,16 @@
 			<attribute name="owner.project.facets" value="jst.web.jstl"/>
 		</attributes>
 	</classpathentry>
-	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
 	<classpathentry kind="con" path="org.eclipse.jdt.USER_LIBRARY/HttpClient"/>
 	<classpathentry kind="con" path="org.eclipse.jdt.USER_LIBRARY/Mail"/>
+	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER/org.eclipse.jdt.internal.debug.ui.launcher.StandardVMType/jre_1.8.121"/>
+	<classpathentry kind="lib" path="WebRoot/WEB-INF/lib/http"/>
+	<classpathentry kind="lib" path="WebRoot/WEB-INF/lib/mail"/>
+	<classpathentry kind="lib" path="WebRoot/WEB-INF/lib/poi"/>
+	<classpathentry kind="lib" path="WebRoot/WEB-INF/lib/spring"/>
+	<classpathentry kind="lib" path="WebRoot/WEB-INF/lib/mail/mail.jar"/>
+	<classpathentry kind="lib" path="WebRoot/WEB-INF/lib/http/httpclient-4.4.1.jar"/>
+	<classpathentry kind="lib" path="WebRoot/WEB-INF/lib/http/httpcore-4.4.1.jar"/>
+	<classpathentry kind="lib" path="WebRoot/WEB-INF/lib/http/json-lib-2.4-jdk15.jar"/>
 	<classpathentry kind="output" path="WebRoot/WEB-INF/classes"/>
 </classpath>
