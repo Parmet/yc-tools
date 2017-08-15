@@ -30,32 +30,33 @@ import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTRow;
  */
 public class WordOperateUtil {
     private int rowNum = 0;
+    private Map<String, Object> param = new HashMap<String, Object>();
     
     /**
      * 填充word数据
      * 
      * @param fileName
-     * @param map
+     * @param data
      * @throws Exception
      */
-    public File ConvertWord(String fileName, Map<String, Object> map) throws Exception {
-        
-        String pathFileName = "D:\\201704\\watermark\\testFile\\tempfile_" + System.currentTimeMillis() + ".doc";
-        File file = new File(pathFileName); // 创建临时文件
-        OutputStream os = new FileOutputStream(file);
+    public File ConvertWord(String fileName, Map<String, Object> data) throws Exception {
+        // 初始化操作
+        File tempFile = this.getTempFile();
+        OutputStream os = new FileOutputStream(tempFile);
         InputStream fileInputStream = new FileInputStream(fileName);
-    
+        
         try {
+            init(data);
             // 读取word源文件
             XWPFDocument document = new XWPFDocument(fileInputStream);
             // 替换段落里面的变量
-            this.replaceInPara(document, map);
+            replaceInPara(document);
             // 替换表格里面的变量
-            this.replaceInTable(document, map);
+            replaceInTable(document);
     
             document.write(os);
-            this.close(os);
-            this.close(fileInputStream);
+            close(os);
+            close(fileInputStream);
             
         } catch (Exception e) {
             throw new Exception(e);
@@ -64,9 +65,33 @@ public class WordOperateUtil {
             this.close(fileInputStream);
         }
         
-        return file;
+        return tempFile;
+    }
+    
+    /**
+     * 初始化
+     * 
+     * @param data 模板数据
+     */
+    private void init(Map<String, Object> data) {
+        this.param = data;
     }
 
+    /**
+     * 创建并获取临时文件
+     * 
+     * @return
+     */
+    private File getTempFile() {
+        StringBuffer tempFileName = new StringBuffer();
+        
+        tempFileName.append("F:/Temp/word/test2.docx");
+        
+        File tempFile = new File(tempFileName.toString());
+        
+        System.out.println("save as : " + tempFileName.toString());
+        return tempFile;
+    }
     
     /**
      * map转换适配器
@@ -106,8 +131,10 @@ public class WordOperateUtil {
      */
     private Map<String, Object> ConvertObjToMap(Object obj) {
         Map<String, Object> reMap = new HashMap<String, Object>();
-        if (obj == null)
+        if (obj == null) {
             return null;
+        }
+        
         Field[] fields = obj.getClass().getDeclaredFields();
         try {
             for (int i = 0; i < fields.length; i++) {
@@ -140,13 +167,15 @@ public class WordOperateUtil {
      * @param params
      *            参数
      */
-    private void replaceInPara(XWPFDocument doc, Map<String, Object> params) {
+    private void replaceInPara(XWPFDocument doc) {
+        // word 中的所有段落 Iterator
         Iterator<XWPFParagraph> iterator = doc.getParagraphsIterator();
         XWPFParagraph para;
         while (iterator.hasNext()) {
             para = iterator.next();
-            Map<String, Object> map = getParagraphData(para, params);
-            this.replaceInPara(para, map);
+            // 匹配段落中域的数据
+            Map<String, Object> curData = getParagraphData(para);
+            replaceRun(para, curData);
         }
     }
 
@@ -158,33 +187,31 @@ public class WordOperateUtil {
      * @param params
      *            参数
      */
-    private void replaceInPara(XWPFParagraph para, Map<String, Object> params) {
-        List<XWPFRun> runs;
-
+    private void replaceRun(XWPFParagraph para, Map<String, Object> curData) {
+        // 段落中的所有词
+        List<XWPFRun> runs = para.getRuns();
         String runText = "";
-        if (this.matcherRegion(para.getParagraphText()).find()) {
-            runs = para.getRuns();
-            if (runs.size() > 0) {
-                int j = runs.size();
-                for (int i = 0; i < j; i++) {
-                    XWPFRun run = runs.get(0);
-                    String i1 = run.toString();
-                    runText += i1;
-                    
-                    //保留最后一个run对象，以便利用原先的样式
-                    if (i < (j - 1)) {
-                        para.removeRun(0);
-                    }
+        
+        if (matcherRegion(para.getParagraphText()).find()) {
+            // 匹配到域之后，组合段落中所有的词再把里面的域全部替换数据
+            int j = runs.size();
+            for (int i = 0; i < j; i++) {
+                XWPFRun run = runs.get(0);
+                String i1 = run.toString();
+                runText += i1;
+                
+                //保留最后一个run对象，以便利用原先的样式
+                if (i < (j - 1)) {
+                    para.removeRun(0);
                 }
-
-                // 直接调用XWPFRun的setText()方法设置文本时，在底层会重新创建一个XWPFRun，把文本附加在当前文本后面，
-                // 所以我们不能直接设值，需要先删除当前run,然后再自己手动插入一个新的run。
-                runText = this.replaceText(runText, params);
-                runs.get(0).setText(runText, 0);
             }
+
+            runText = replaceText(runText, curData);
+            //使用被保留的Run作为载体显示替换之后的内容
+            runs.get(0).setText(runText, 0);
         }
     }
-
+    
     /**
      * 替换字符串的首个匹配项
      * 
@@ -192,16 +219,17 @@ public class WordOperateUtil {
      * @param params
      * @return
      */
-    private String replaceText(String text, Map<String, Object> params) {
+    private String replaceText(String text, Map<String, Object> curData) {
         Matcher matcher = this.matcherRegion(text);
         String key = "";
         
         if (matcher.find()) {
+            // 获取第一个匹配项
             key = matcher.group(1);
-            text = this.replaceVal(key, text, params);
+            text = replaceVal(key, text, curData);
             
             // 该字符串存在多个匹配项的情况下，调用replaceText替换字符串的首个匹配项
-            text = this.replaceText(text, params);
+            text = replaceText(text, curData);
         }
         
         return text;
@@ -214,18 +242,23 @@ public class WordOperateUtil {
      * @param params 
      * @return
      */
-    private String replaceVal(String key, String text, Map<String, Object> params) {
+    private String replaceVal(String key, String text, Map<String, Object> curData) {
+        // 替换域的值
         String defaultVal = "";
+        // 准备替换的域的字符窜
         String targetStr = "${" + key + "}";
         
-        Matcher matcher = this.matcherDefaultVale(text);
+        // 匹配域的默认值
+        Matcher matcher = matcherDefaultVale(text);
         if (matcher.find()) {
             defaultVal = matcher.group(1);
-            targetStr += "?\"" + defaultVal + "\"";
+            // 如果域设置了默认值，准备替换的域的字符窜要加上默认值的申明，
+            // 确保不出现域被替换，默认值的申明仍跟在其后面的现象
+            targetStr += "?\"" + defaultVal + "\""; 
         }
         
-        if (params.containsKey(key)) {
-            defaultVal = String.valueOf(params.get(key));
+        if (curData.containsKey(key)) {
+            defaultVal = String.valueOf(curData.get(key));
         }
         
         text = text.replace(targetStr, defaultVal);
@@ -234,58 +267,101 @@ public class WordOperateUtil {
     }
     
     /**
-     * 替换表格里面的变量
+     * 替换表格里面的域
+     * 
+     * 遍历表格中的行，接着遍历行中的单元格
      * 
      * @param doc
      *            要替换的文档
      * @param params
      *            参数
      */
-    private void replaceInTable(XWPFDocument doc, Map<String, Object> params) {
+    private void replaceInTable(XWPFDocument doc) {
+        // 获取word所有表格（不包括表格嵌套的表格）
         Iterator<XWPFTable> iterator = doc.getTablesIterator();
-        XWPFTable table;
-        
-        int modelRowCount = 0;
-        List<XWPFTableRow> rows;
-
         while (iterator.hasNext()) {
-            table = iterator.next();
-            rows = table.getRows();
-            modelRowCount = rows.size();
-            for (int i = (modelRowCount - 1); i >= 0; i--) {
-                XWPFTableRow dataRow = rows.get(i);
-                int rowCount = this.getRowCount(dataRow, params);
-                if (rowCount == 0) {
-                    Map<String, Object> rowData = this.getRowData(dataRow, params);
-                    this.replaceInRow(table, dataRow, rowData);
-                    continue;
-                }
+            replaceInTable(iterator.next());
+        }
+    }
+    
+    /**
+     * 替换表格里面的域
+     * 
+     * @param table
+     *            要替换的表格
+     * @param params
+     *            参数
+     */
+    private void replaceInTable(XWPFTable table) {
+        // 表格中的所有行
+        List<XWPFTableRow> rows = table.getRows();
+        // 当前模板表格的初始行数
+        int modelRowCount = rows.size();
+        // 从最后一行开始填充数据，保证在后续动态添加行的时候能正常填充完整个表格模板
+        for (int i = (modelRowCount - 1); i >= 0; i--) {
+            // 模板行
+            XWPFTableRow dataRow = rows.get(i);
+            // 通过表格中的域匹配数据的大小，表示会在当前表格增加的行数
+            int rowCount = getRowCount(dataRow);
+            // 非集合数据
+            if (rowCount == 0) {
+                replaceInRow(dataRow);
+                continue;
+            }
+            
+            // 集合类型的数据
+            // 重置当前填充行对应的数据项序号
+            this.rowNum = 0;
+            for (int j = 0; j < rowCount; j++) {
+                // 复制模板行并创建新行填充新行数据
+                // ps：根据集合的大小创建相同数量的行
+                copyTableRow(table, dataRow, (i + j + 1));
+                // 更新当前填充行对应的数据项序号
+                this.rowNum++;
                 
-                for (int j = 0; j < rowCount; j++) {
-                    this.copyTableRow(table, dataRow, (i + j + 1), params);
-                    
-                    if (j == (rowCount - 1)) {
-                        table.removeRow(i);
-                        this.rowNum = 0;
-                    }
+                // 在集合数据填充完之后把模板行删掉
+                if (j == (rowCount - 1)) {
+                    table.removeRow(i);
+                    // 重置当前填充行对应的数据项序号
+                    this.rowNum = 0;
                 }
             }
         }
         
     }
     
-    private void replaceInRow(XWPFTable table, XWPFTableRow newRow, Map<String, Object> params) {
+    private void replaceInRow(XWPFTableRow newRow) {
+        // 匹配当前行所有域的对应值
+        Map<String, Object> curData = this.getRowData(newRow);
+        
         for (XWPFTableCell cell : newRow.getTableCells()) {
-            this.replaceInCell(cell, params);
+            this.replaceInCell(cell, curData);
         }
     }
     
-    private void replaceInCell(XWPFTableCell cell, Map<String, Object> params) {
+    private void replaceInCell(XWPFTableCell cell, Map<String, Object> curData) {
+        replaceTableInCell(cell);
+        
         List<XWPFParagraph> paras = cell.getParagraphs();
         int size = paras.size();
         for (int i = 0; i < size; i++) {
             XWPFParagraph para = paras.get(i);
-            this.replaceInPara(para, params);
+            this.replaceRun(para, curData);
+        }
+    }
+    
+    /**
+     * 判断是否嵌套表格并填充对应内容
+     * 
+     * @param cell
+     * @param params
+     */
+    private void replaceTableInCell(XWPFTableCell cell) {
+        // 存在嵌套的表格
+        if (!cell.getTables().isEmpty()) {
+            for (XWPFTable table : cell.getTables()) {
+                this.replaceInTable(table);
+            }
         }
     }
     
@@ -296,7 +372,7 @@ public class WordOperateUtil {
      * @param params
      * @return
      */
-    private Map<String, Object> getRowData(XWPFTableRow row, Map<String, Object> params) {
+    private Map<String, Object> getRowData(XWPFTableRow row) {
         List<XWPFParagraph> paras;
         List<XWPFTableCell> cells = row.getTableCells();
         Map<String, Object> map = new HashMap<String, Object>();
@@ -304,7 +380,7 @@ public class WordOperateUtil {
         for (XWPFTableCell cell : cells) {
             paras = cell.getParagraphs();
             for (XWPFParagraph para : paras) {
-                map.putAll(this.getParagraphData(para, params));
+                map.putAll(getParagraphData(para));
             }
         }
         
@@ -312,38 +388,47 @@ public class WordOperateUtil {
     }
     
     /**
-     * 获取当前字符串中的数据Map
+     * 获取当前字符串中域的对应数据Map
      * 
      * @param para
      * @param params
      * @return
      */
-    private Map<String, Object> getParagraphData(XWPFParagraph para, Map<String, Object> params) {
-        Map<String, Object> map = new HashMap<String, Object>();
-        Map<String, Object> data = params;
-        Matcher matcher = this.matcherRegion(para.getParagraphText());
+    private Map<String, Object> getParagraphData(XWPFParagraph para) {
+        Map<String, Object> result = new HashMap<String, Object>();
+        // 匹配字符串中的域
+        Matcher matcher = matcherRegion(para.getParagraphText());
         while (matcher.find()) {
+            String region = matcher.group(1);
+            result.putAll(getRegionData(region));
+        }
+        
+        return result;
+    }
+    
+    private Map<String, Object> getRegionData(String region) {
+        Object val = "";
+        // 当前匹配中的对象对应的map
+        Map<String, Object> curData = this.param;
+        String[] keys = region.split("\\.");
+        // 如果是一个复杂的对象，如'person.name'，则去格式化person对象
+        // TODO 如果当前行中域是个复杂对象并且数据类型是集合，如'person.list'，该如何处理
+        for (int j = 0; j < keys.length; j++) {
+            val = curData.get(keys[j]);
+            if (val == null || val.equals("")) {
+                break; // 跳出当前域的循环拿数据
+            }
             
-            String key = matcher.group(1);
-            String[] keys = key.split("\\.");
-            for (int i = 0; i < keys.length; i++) {
-                Object val = data.get(keys[i]);
-                if (val == null) {
-                    break;
-                }
-                
-                if (i != (keys.length - 1)) {
-                    data = this.ConvertObjToMapAdpater(val);
-                } else {
-                    map.put(key, String.valueOf(val));
-                    data = params;
-                }
+            if (j != (keys.length - 1)) {
+                curData = ConvertObjToMapAdpater(val);
+            } else  {
+                curData.put(region, String.valueOf(val));
             }
         }
         
-        return map;
+        return curData;
     }
-
+    
     /**
      * 复制表格的行
      * 
@@ -353,25 +438,21 @@ public class WordOperateUtil {
      * @param pos
      * @param params 
      */
-    private void copyTableRow(XWPFTable table, XWPFTableRow row, int pos, Map<String, Object> params) {
+    private void copyTableRow(XWPFTable table, XWPFTableRow row, int pos) {
         XWPFTableRow newRow = new XWPFTableRow((CTRow) row.getCtRow().copy(), table) ;
-        
-        Map<String, Object> rowData = this.getRowData(newRow, params);
-        this.replaceInRow(table, newRow, rowData);
-        
+        this.replaceInRow(newRow);
         table.addRow(newRow, pos);
-        this.rowNum++;
     }
     
    
     /**
-     * 获取表格数据项的大小
+     * 根据域获取表格数据项的大小
      * 
      * @param row
      * @param params
      * @return
      */
-    private int getRowCount(XWPFTableRow row, Map<String, Object> params) {
+    private int getRowCount(XWPFTableRow row) {
         int rowCount = 0;
         Matcher matcher = null;
         String[] key;
@@ -379,28 +460,30 @@ public class WordOperateUtil {
         List<XWPFParagraph> paras;
         
         cells = row.getTableCells();
+       //TODO 如果一行中同时存在数据大小为1和2以上的该如何处理
         for (XWPFTableCell cell : cells) {
-            
             paras = cell.getParagraphs();
             for (XWPFParagraph para : paras) {
-                
-                matcher = this.matcherRegion(para.getParagraphText());
+                matcher = matcherRegion(para.getParagraphText());
                 if (matcher.find()) {
+                    // 取第一个匹配到的域为准获取该域对应数据的大小
                     key = (matcher.group(1)).split("\\.");
                     if (key[0].equals("")) {
                         return rowCount;
                     }
                     
-                    Object val = params.get(key[0]);
+                    // 没有对应数据则跳过，后面的单元格可能会存在多数据的域
+                    Object val = this.param.get(key[0]);
                     if (val == null) {
-                        return rowCount;
+                        break;
                     }
                     
-                    if (params.get(key[0]) instanceof Collection<?>) {
-                        Collection<?> col = (Collection<?>) params.get(key[0]);
+                    // 根据域匹配对应数据的大小
+                    if (val instanceof Collection<?>) {
+                        Collection<?> col = (Collection<?>) val;
                         rowCount = col.size();
-                    } else if (params.get(key[0]).getClass().isArray()) {
-                        Object[] objs = (Object[]) params.get(key[0]);
+                    } else if (val.getClass().isArray()) {
+                        Object[] objs = (Object[]) val;
                         rowCount = objs.length;
                     } else {
                         return rowCount;
@@ -417,7 +500,7 @@ public class WordOperateUtil {
     }
 
     /**
-     * 正则匹配字符串
+     * 正则匹配字符串，匹配域
      * 
      * @param str
      * @return
@@ -429,7 +512,7 @@ public class WordOperateUtil {
     }
     
     /**
-     * 正则匹配字符串
+     * 正则匹配字符串，匹配默认值
      * 
      * @param str
      * @return
