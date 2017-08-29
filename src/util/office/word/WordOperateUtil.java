@@ -7,7 +7,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.reflect.Field;
+import java.text.SimpleDateFormat;
 import java.util.Collection;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -24,12 +26,41 @@ import org.apache.poi.xwpf.usermodel.XWPFTableRow;
 import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTRow;
 
 /**
- * word操作类
+ * word模板引擎
  * 
- * @author xiaoyc 2017-04-14
+ * <br/>
+ * <br/>
+ * <b>描述以及注意事项：</b> <br/>
+ * 1. 域格式：${region} <br/>
+ * 2. 带扩展方法的域格式：${region?ext} <br/>
+ * 3. 表格中列表的域直接使用key即可，如：${listName.attr}，程序自动判断是否为集合或者数组类型，是则添加行并填充对应数据 <br/>
+ * <br/>
+ * 
+ * <b>功能列表：</b> <br/>
+ * 1. 支持行和表格元素中域的替换 <br/>
+ * 2. 支持默认值，如：${region?val} <br/>
+ * 3. 支持date转换，如：${region?date(yyyy-MM-dd HH:mm:ss)}，注意月份和小时要大写，且格式不需要带双引号 <br/>
+ *  <br/>
+ *  
+ * <b>版本更新说明：</b> <br/>
+ * -- version 1.0<br/>
+ * 读取word中行以及表格的域并填充对应的数据<br/>
+ * -- version 1.1<br/>
+ * 添加默认值的处理<br/>
+ * -- version 1.2 <br/>
+ * 增加表格中嵌套表格的处理，并整理程序结构<br/>
+ * -- version 1.3 <br/>
+ * 1. 域默认值格式更改为${region?val} <br/> 
+ * 2. 并提供日期转换方法${region?date(yyyy-MM-dd)}<br/>
+ * 
+ * @author xiaoyc
+ * @since 2017-04-14
+ * @version v1.3
+ * @editTime 2017-08-29
  */
 public class WordOperateUtil {
     private int rowNum = 0;
+    private String targetFile = "";
     private Map<String, Object> param = new HashMap<String, Object>();
     
     /**
@@ -39,14 +70,15 @@ public class WordOperateUtil {
      * @param data
      * @throws Exception
      */
-    public File ConvertWord(String fileName, Map<String, Object> data) throws Exception {
+    public File ConvertWord(String fileName, String tempFilePath, Map<String, Object> data) throws Exception {
+        init(fileName, data);
+        
         // 初始化操作
-        File tempFile = this.getTempFile();
+        File tempFile = this.getTempFile(tempFilePath);
         OutputStream os = new FileOutputStream(tempFile);
-        InputStream fileInputStream = new FileInputStream(fileName);
+        InputStream fileInputStream = new FileInputStream(targetFile);
         
         try {
-            init(data);
             // 读取word源文件
             XWPFDocument document = new XWPFDocument(fileInputStream);
             // 替换段落里面的变量
@@ -57,7 +89,6 @@ public class WordOperateUtil {
             document.write(os);
             close(os);
             close(fileInputStream);
-            
         } catch (Exception e) {
             throw new Exception(e);
         } finally {
@@ -73,8 +104,13 @@ public class WordOperateUtil {
      * 
      * @param data 模板数据
      */
-    private void init(Map<String, Object> data) {
+    private void init(String fileName, Map<String, Object> data) {
         this.param = data;
+        if (fileName.contains("\\")) {
+            fileName = fileName.replace("\\", "/");
+        }
+        
+        this.targetFile = fileName;
     }
 
     /**
@@ -82,13 +118,9 @@ public class WordOperateUtil {
      * 
      * @return
      */
-    private File getTempFile() {
+    private File getTempFile(String tempFilePath) {
         StringBuffer tempFileName = new StringBuffer();
-        
-        tempFileName.append("F:/Temp/word/test2.docx");
-        
-        File tempFile = new File(tempFileName.toString());
-        
+        File tempFile = new File(tempFilePath);
         System.out.println("save as : " + tempFileName.toString());
         return tempFile;
     }
@@ -139,8 +171,7 @@ public class WordOperateUtil {
         try {
             for (int i = 0; i < fields.length; i++) {
                 try {
-                    Field f = obj.getClass().getDeclaredField(
-                            fields[i].getName());
+                    Field f = obj.getClass().getDeclaredField(fields[i].getName());
                     f.setAccessible(true);
                     Object o = f.get(obj);
                     reMap.put(fields[i].getName(), o);
@@ -244,25 +275,22 @@ public class WordOperateUtil {
      */
     private String replaceVal(String key, String text, Map<String, Object> curData) {
         // 替换域的值
-        String defaultVal = "";
+        String val = "";
         // 准备替换的域的字符窜
         String targetStr = "${" + key + "}";
         
-        // 匹配域的默认值
-        Matcher matcher = matcherDefaultVale(text);
-        if (matcher.find()) {
-            defaultVal = matcher.group(1);
-            // 如果域设置了默认值，准备替换的域的字符窜要加上默认值的申明，
-            // 确保不出现域被替换，默认值的申明仍跟在其后面的现象
-            targetStr += "?\"" + defaultVal + "\""; 
+        // 处理扩展方法并获取替换的值
+        String[] keyStrs = key.split("\\?");
+        if (keyStrs.length == 2) {
+            Object dateVal = curData.get(keyStrs[0]);
+            val = dealExt(key, dateVal);
+        } else if (keyStrs.length == 1 && curData.containsKey(key)) {
+            val = String.valueOf(curData.get(key));
+        } else {
+            val = "";
         }
         
-        if (curData.containsKey(key)) {
-            defaultVal = String.valueOf(curData.get(key));
-        }
-        
-        text = text.replace(targetStr, defaultVal);
-        
+        text = text.replace(targetStr, val);
         return text;
     }
     
@@ -408,6 +436,11 @@ public class WordOperateUtil {
     
     private Map<String, Object> getRegionData(String region) {
         Object val = "";
+        // 不能是带有扩展方法的字符串
+        if (region.contains("?")) {
+            region = region.split("\\?")[0];
+        }
+        
         // 当前匹配中的对象对应的map
         Map<String, Object> curData = this.param;
         String[] keys = region.split("\\.");
@@ -422,7 +455,7 @@ public class WordOperateUtil {
             if (j != (keys.length - 1)) {
                 curData = ConvertObjToMapAdpater(val);
             } else  {
-                curData.put(region, String.valueOf(val));
+                curData.put(region, val);
             }
         }
         
@@ -500,6 +533,69 @@ public class WordOperateUtil {
     }
 
     /**
+     * 处理扩展方法
+     * 
+     * @param key 域字符串
+     * @param val 当前域的值
+     * @return
+     */
+    private String dealExt(String key, Object val) {
+        String result = "";
+        Matcher extMatcher = null;
+        String[] keyStrs = key.split("\\?");
+        // 数据中不存在对象的值，则匹配默认值，?""
+        if (val == null) {
+            extMatcher = matcherDefaultVale(key);
+            if (extMatcher.find()) {
+                result = extMatcher.group(1);
+            }
+            
+            return result;
+        }
+        
+        // 匹配date方法（Date转成String）
+        extMatcher = matcherFuntion(keyStrs[1], "date");
+        if (extMatcher.find()) {
+            String format = extMatcher.group(1);
+            result =  formatDate(keyStrs[0], val, format);
+            return result;
+        }
+        
+        return result;
+    }
+    
+    /**
+     * 日期格式转换
+     * 
+     * @param key 字段
+     * @param dateVal 字段值
+     * @param format 格式
+     * @return
+     */
+    private String formatDate(String key, Object dateVal, String format) {
+        String val = "";
+        Date date = null;
+        
+        if (dateVal instanceof java.sql.Timestamp) {
+            date = (java.sql.Timestamp)dateVal;
+        }
+        
+        if (dateVal instanceof java.sql.Date) {
+            date = new Date(((java.sql.Date) dateVal).getTime());
+        }
+        
+        if (dateVal instanceof Date) {
+            date = (Date) dateVal;
+        }
+        
+        SimpleDateFormat dateFromat = new SimpleDateFormat();
+        dateFromat.applyPattern(format);
+        
+        val = dateFromat.format(date);
+        return val;
+    }
+    
+    /**
      * 正则匹配字符串，匹配域
      * 
      * @param str
@@ -519,6 +615,18 @@ public class WordOperateUtil {
      */
     public Matcher matcherDefaultVale(String str) {
         Pattern pattern = Pattern.compile("\\?\"(.*?)\"", Pattern.CASE_INSENSITIVE);
+        Matcher matcher = pattern.matcher(str);
+        return matcher;
+    }
+    
+    /**
+     * 正则匹配字符串，匹配扩展方法
+     * 
+     * @param str
+     * @return
+     */
+    public Matcher matcherFuntion(String str, String functionName) {
+        Pattern pattern = Pattern.compile(functionName + "[(](.*?)[)]", Pattern.CASE_INSENSITIVE);
         Matcher matcher = pattern.matcher(str);
         return matcher;
     }
