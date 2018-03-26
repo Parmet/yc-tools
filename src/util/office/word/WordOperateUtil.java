@@ -1,4 +1,4 @@
-package util.office.word;
+package com.chinauip.cfc.run.common.upload;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -7,7 +7,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.reflect.Field;
-import java.text.SimpleDateFormat;
 import java.util.Collection;
 import java.util.Date;
 import java.util.HashMap;
@@ -17,6 +16,7 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.apache.commons.lang.StringUtils;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.apache.poi.xwpf.usermodel.XWPFParagraph;
 import org.apache.poi.xwpf.usermodel.XWPFRun;
@@ -24,6 +24,11 @@ import org.apache.poi.xwpf.usermodel.XWPFTable;
 import org.apache.poi.xwpf.usermodel.XWPFTableCell;
 import org.apache.poi.xwpf.usermodel.XWPFTableRow;
 import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTRow;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.chinauip.cfc.run.common.json.JsonUtil;
+import com.chinauip.cfc.run.common.util.DateUtil;
 
 /**
  * word模板引擎
@@ -34,12 +39,14 @@ import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTRow;
  * 1. 域格式：${region} <br/>
  * 2. 带扩展方法的域格式：${region?ext} <br/>
  * 3. 表格中列表的域直接使用key即可，如：${listName.attr}，程序自动判断是否为集合或者数组类型，是则添加行并填充对应数据 <br/>
+ * 4. 模板文件应该放在/WEB-INF/uploadconfig/template/下，且目标文件的路径只需要提供在/WEB-INF/uploadconfig/template/下的路径 <br/>
  * <br/>
  * 
  * <b>功能列表：</b> <br/>
  * 1. 支持行和表格元素中域的替换 <br/>
  * 2. 支持默认值，如：${region?val} <br/>
- * 3. 支持date转换，如：${region?date(yyyy-MM-dd HH:mm:ss)}，注意月份和小时要大写，且格式不需要带双引号 <br/>
+ * 3. 支持date转换，如：${region?date(yyyy-MM-dd HH:mm:ss)}，注意月份和小时要大写，且格式不需要带双引号。
+ * 转换格式支持[java.util.date, java.sql.date, java.sql.Timestamp, date 字符串类型（如：2017-01-01）] <br/>
  *  <br/>
  *  
  * <b>版本更新说明：</b> <br/>
@@ -52,13 +59,17 @@ import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTRow;
  * -- version 1.3 <br/>
  * 1. 域默认值格式更改为${region?val} <br/> 
  * 2. 并提供日期转换方法${region?date(yyyy-MM-dd)}<br/>
+ * -- version 1.4 <br/>
+ * 修复date()不能格式化date字符串 <br/>
  * 
  * @author xiaoyc
  * @since 2017-04-14
- * @version v1.3
- * @editTime 2017-08-29
+ * @version v1.4
+ * @editTime 2017-09-07
  */
 public class WordOperateUtil {
+    protected final Logger logger = LoggerFactory.getLogger(getClass());
+    
     private int rowNum = 0;
     private String targetFile = "";
     private Map<String, Object> param = new HashMap<String, Object>();
@@ -70,11 +81,11 @@ public class WordOperateUtil {
      * @param data
      * @throws Exception
      */
-    public File ConvertWord(String fileName, String tempFilePath, Map<String, Object> data) throws Exception {
+    public File ConvertWord(String fileName, Map<String, Object> data) throws Exception {
         init(fileName, data);
         
         // 初始化操作
-        File tempFile = this.getTempFile(tempFilePath);
+        File tempFile = this.getTempFile();
         OutputStream os = new FileOutputStream(tempFile);
         InputStream fileInputStream = new FileInputStream(targetFile);
         
@@ -106,6 +117,12 @@ public class WordOperateUtil {
      */
     private void init(String fileName, Map<String, Object> data) {
         this.param = data;
+        
+        // InputStream 需要完整路径
+        if (StringUtils.isNotBlank(fileName)) {
+            fileName = CfcFilePathHelp.getUploadConfigFilePath() + fileName;
+        } 
+        
         if (fileName.contains("\\")) {
             fileName = fileName.replace("\\", "/");
         }
@@ -118,9 +135,16 @@ public class WordOperateUtil {
      * 
      * @return
      */
-    private File getTempFile(String tempFilePath) {
+    private File getTempFile() {
         StringBuffer tempFileName = new StringBuffer();
-        File tempFile = new File(tempFilePath);
+        
+        tempFileName.append(CfcFilePathHelp.getUploadConfigFilePath());
+        tempFileName.append("/word/tempfile_");
+        tempFileName.append(DateUtil.getCurrentDate("yyyyMMddhhmmssSSS"));
+        tempFileName.append(".doc");
+        
+        File tempFile = new File(tempFileName.toString());
+        
         System.out.println("save as : " + tempFileName.toString());
         return tempFile;
     }
@@ -150,6 +174,8 @@ public class WordOperateUtil {
             }
             
             return this.ConvertObjToMapAdpater(((Object[]) obj)[this.rowNum]);
+        } else if (obj instanceof String) {
+            return JsonUtil.getMap4Json(String.valueOf(obj));
         } else {
             return this.ConvertObjToMap(obj);
         }
@@ -561,6 +587,7 @@ public class WordOperateUtil {
             return result;
         }
         
+        result = String.valueOf(val);
         return result;
     }
     
@@ -588,10 +615,15 @@ public class WordOperateUtil {
             date = (Date) dateVal;
         }
         
-        SimpleDateFormat dateFromat = new SimpleDateFormat();
-        dateFromat.applyPattern(format);
+        if (dateVal instanceof String) {
+            date = DateUtil.parseDate(String.valueOf(dateVal));
+        }
         
-        val = dateFromat.format(date);
+        if (date == null) {
+            logger.warn(key + "日期格式错误: date不支持" + dateVal + ", 请使用[java.util.date, java.sql.date, java.sql.Timestamp, date 字符串类型（如：2017-01-01）]");
+        }
+        
+        val = DateUtil.format(date, format);
         return val;
     }
     
@@ -614,6 +646,13 @@ public class WordOperateUtil {
      * @return
      */
     public Matcher matcherDefaultVale(String str) {
+        if (str.contains("“")) {
+            str = str.replace("“", "\"");
+        }
+        if (str.contains("”")) {
+            str = str.replace("”", "\"");
+        }
+        
         Pattern pattern = Pattern.compile("\\?\"(.*?)\"", Pattern.CASE_INSENSITIVE);
         Matcher matcher = pattern.matcher(str);
         return matcher;
