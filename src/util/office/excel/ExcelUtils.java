@@ -39,6 +39,7 @@ import sun.misc.BASE64Encoder;
  * poi 读取excel 支持2003 --2007 及以上文件 
  *  
  */  
+@SuppressWarnings("deprecation")
 public class ExcelUtils {  
   
   
@@ -88,7 +89,8 @@ public class ExcelUtils {
         FileInputStream fis=null;  
         try {  
             fis=new FileInputStream(filePath);  
-            HSSFWorkbook wookbook = new HSSFWorkbook(fis);  // 创建对Excel工作簿文件的引用  
+            @SuppressWarnings("resource")
+			HSSFWorkbook wookbook = new HSSFWorkbook(fis);  // 创建对Excel工作簿文件的引用  
             HSSFSheet sheet = wookbook.getSheetAt(0);   // 在Excel文档中，第一张工作表的缺省索引是0  
             int rows = sheet.getPhysicalNumberOfRows(); // 获取到Excel文件中的所有行数­  
             Map<Integer,String> keys=new HashMap<Integer, String>();  
@@ -157,12 +159,13 @@ public class ExcelUtils {
      * @return 
      * @throws java.io.IOException 
      */  
-    public static List<Map<Integer, Object>> readExcel2007(String filePath) throws IOException{  
+	public static List<Map<Integer, Object>> readExcel2007(String filePath) throws IOException{  
         List<Map<Integer, Object>> valueList=new ArrayList<Map<Integer, Object>>();  
         FileInputStream fis =null;  
         try {  
             fis =new FileInputStream(filePath);  
-            XSSFWorkbook xwb = new XSSFWorkbook(fis);   // 构造 XSSFWorkbook 对象，strPath 传入文件路径  
+            @SuppressWarnings("resource")
+			XSSFWorkbook xwb = new XSSFWorkbook(fis);   // 构造 XSSFWorkbook 对象，strPath 传入文件路径  
             XSSFSheet sheet = xwb.getSheetAt(0);            // 读取第一章表格内容  
             // 定义 row、cell  
             XSSFRow row;  
@@ -254,7 +257,8 @@ public class ExcelUtils {
      * @param dst 
      *            目标位置 
      */  
-    private static void copy(File src, File dst) {  
+    @SuppressWarnings("unused")
+	private static void copy(File src, File dst) {  
         InputStream in = null;  
         OutputStream out = null;  
         try {  
@@ -351,7 +355,8 @@ public class ExcelUtils {
      * @param fileNames 标题key
      * @param list 列表数据
      */
-    public static <E> void exportExcel(HttpServletRequest request,HttpServletResponse response,String fileName,String[] header,String[] fileNames,List<E> list) {
+    @SuppressWarnings({ "rawtypes", "unchecked" })
+	public static <E> void exportExcel(HttpServletRequest request,HttpServletResponse response,String fileName,String[] header,String[] fileNames,List<E> list) {
         //创建工作簿
         HSSFWorkbook wb=new HSSFWorkbook();
         //创建一个sheet

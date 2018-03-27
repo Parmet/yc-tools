@@ -112,7 +112,8 @@ public class SecretUtil {
      }
      
      
-     public static void main(String args[]) throws IOException,
+     @SuppressWarnings("static-access")
+	public static void main(String args[]) throws IOException,
       NoSuchAlgorithmException, NoSuchPaddingException, InvalidKeySpecException,
       InvalidKeyException, IOException {
        SecretUtil des = new SecretUtil();

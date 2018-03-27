@@ -1,4 +1,4 @@
-package util.json;
+package util.data;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -39,7 +39,7 @@ public class JsonUtil {
      * 			  要转换的对象
      * @return 对象
      */  
-    @SuppressWarnings("unchecked")  
+    @SuppressWarnings({ "unchecked", "rawtypes" })  
     public static <T> T fromJson(String jsonString, Class<T> type, Map<String, Class> classMap) {
         JSONObject jsonObject = JSONObject.fromObject(jsonString);  
         return (T) JSONObject.toBean(jsonObject, type,classMap);  

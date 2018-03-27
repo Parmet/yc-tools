@@ -58,7 +58,7 @@ public class SpringContextUtil implements ApplicationContextAware {
 	 * @return Object 返回requiredType类型对象
 	 * @throws BeansException
 	 */
-	@SuppressWarnings("unchecked")
+	@SuppressWarnings({ "unchecked", "rawtypes" })
 	public static Object getBean(String name, Class requiredType) throws BeansException {
 		return applicationContext.getBean(name, requiredType);
 	}

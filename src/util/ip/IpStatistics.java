@@ -13,8 +13,7 @@ import java.net.URLConnection;
 import java.util.HashSet;
 import java.util.Set;
 
-import com.json.JSONException;
-import com.json.JSONObject;
+import net.sf.json.JSONException;
 
 /**
  * ip统计
@@ -132,16 +131,16 @@ public class IpStatistics {
 			}
 			reader.close();
 			
-			String ipAddr = result.toString();
+//			String ipAddr = result.toString();
 			try {
-				JSONObject obj1 = new JSONObject(ipAddr);
-				if ("0".equals(obj1.get("status").toString())) {
-					JSONObject obj2 = new JSONObject(obj1.get("content").toString());
-					JSONObject obj3 = new JSONObject(obj2.get("address_detail").toString());
-					return obj3.get("province").toString();
-				} else {
+//				JSONObject obj1 = new JSONObject(ipAddr);
+//				if ("0".equals(obj1.get("status").toString())) {
+//					JSONObject obj2 = new JSONObject(obj1.get("content").toString());
+//					JSONObject obj3 = new JSONObject(obj2.get("address_detail").toString());
+//					return obj3.get("province").toString();
+//				} else {
 					return "其他";
-				}
+//				}
 			} catch (JSONException e) {
 				e.printStackTrace();
 				return "其他";

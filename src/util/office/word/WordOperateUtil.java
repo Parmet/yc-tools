@@ -1,4 +1,4 @@
-package com.chinauip.cfc.run.common.upload;
+package util.office.word;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -27,8 +27,8 @@ import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTRow;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.chinauip.cfc.run.common.json.JsonUtil;
-import com.chinauip.cfc.run.common.util.DateUtil;
+import util.data.JsonUtil;
+import util.date.DateUtil;
 
 /**
  * word模板引擎
@@ -120,7 +120,7 @@ public class WordOperateUtil {
         
         // InputStream 需要完整路径
         if (StringUtils.isNotBlank(fileName)) {
-            fileName = CfcFilePathHelp.getUploadConfigFilePath() + fileName;
+//            fileName = CfcFilePathHelp.getUploadConfigFilePath() + fileName;
         } 
         
         if (fileName.contains("\\")) {
@@ -138,9 +138,9 @@ public class WordOperateUtil {
     private File getTempFile() {
         StringBuffer tempFileName = new StringBuffer();
         
-        tempFileName.append(CfcFilePathHelp.getUploadConfigFilePath());
+//        tempFileName.append(CfcFilePathHelp.getUploadConfigFilePath());
         tempFileName.append("/word/tempfile_");
-        tempFileName.append(DateUtil.getCurrentDate("yyyyMMddhhmmssSSS"));
+//        tempFileName.append(DateUtil.getCurrentDate("yyyyMMddhhmmssSSS"));
         tempFileName.append(".doc");
         
         File tempFile = new File(tempFileName.toString());
@@ -175,7 +175,7 @@ public class WordOperateUtil {
             
             return this.ConvertObjToMapAdpater(((Object[]) obj)[this.rowNum]);
         } else if (obj instanceof String) {
-            return JsonUtil.getMap4Json(String.valueOf(obj));
+            return JsonUtil.jsonToMap(String.valueOf(obj));
         } else {
             return this.ConvertObjToMap(obj);
         }
@@ -616,14 +616,14 @@ public class WordOperateUtil {
         }
         
         if (dateVal instanceof String) {
-            date = DateUtil.parseDate(String.valueOf(dateVal));
+            date = DateUtil.convertStrToDate(String.valueOf(dateVal));
         }
         
         if (date == null) {
             logger.warn(key + "日期格式错误: date不支持" + dateVal + ", 请使用[java.util.date, java.sql.date, java.sql.Timestamp, date 字符串类型（如：2017-01-01）]");
         }
         
-        val = DateUtil.format(date, format);
+        val = DateUtil.getDateTime(format, date);
         return val;
     }
     

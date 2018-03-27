@@ -5,10 +5,10 @@ import java.util.UUID;
 
 public class DesTest {
 	public static void main(String[] args) {
-		// bulidKey();
+		 bulidKey();
 		 decode();
-		// check();
-//		bulidRequest();
+		 check();
+		bulidRequest();
 	}
 
 	private static void bulidRequest() {
@@ -77,7 +77,7 @@ public class DesTest {
 		String alias = "wbxtws";// 证书的通用名
 		String keyStorePath = "F:\\temp\\0117\\" + alias + ".jks";
 		String storeFilePass = "wbxtws20160128";// JKS文件的密码
-		String privateKeyPassword = "wbxtws20160128";// 私钥密码
+//		String privateKeyPassword = "wbxtws20160128";// 私钥密码
 		System.out.println("证书是否有效:"
 				+ CAUtil.verifyCertificate(new Date(), keyStorePath,
 						storeFilePass, alias));

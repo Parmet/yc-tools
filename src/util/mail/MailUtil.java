@@ -201,8 +201,8 @@ public class MailUtil {
 	    
 	    
 	    public static void main(String[] args) {
-	        MailUtil se = new MailUtil(false);
-	        se.sendEmail("邮件主题", "邮件内容", "1216164575@qq.com");
+//	        MailUtil se = new MailUtil(false);
+//	        se.sendEmail("邮件主题", "邮件内容", "1216164575@qq.com");
 	        System.out.println("send success");
 //	        File affix = new File("c:\\测试-test.txt");
 //	        se.sendEmailWithAttachment("邮件主题", "邮件内容", "1216164575@qq.com", affix);//

@@ -387,7 +387,7 @@ public class CAUtil {
 
    
 	public static void main(String[] str) throws Exception {
-		 FileInputStream in=null;
+//		 FileInputStream in=null;
     	
 		
 //		String alias="wbxtws";//证书的通用名
